@@ -30,7 +30,7 @@ https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.ht
 4. The lamp will now have an Unicast Address -> take a note of this
 5. Repeat the steps above for all your lamps
 6. Clone the repository
-7. Adopt the sdkconfig with your WIFI password and the Home Assistant credentials (create a new User in HA to use with MQTT)
+7. Adopt the sdkconfig with your WIFI password and the Home Assistant credentials (create a new User in HA to use with MQTT) & rename the file to sdkconfig
 8. Adopt the `mqtt_event_handler` function in the `main.c` file to the Unicast Addresses of your lamps
 9.  Build and flash the project to your ESP
 10. Provision the ESP -> same as Steps 1-3, with the following Elements:
@@ -43,22 +43,28 @@ I used [MQTTX](https://mqttx.app/)
 
 Example config message:
 
-Topic: `homeassistant/light/living/config`
+Topic: `homeassistant/light/test/config`
 
 
 Payload:
 ```
 {
-    "name":"LivingRoomLamp",
-    "command_topic":"homeassistant/switch/living/set",
-    "state_topic":"homeassistant/switch/living/state",
-    "unique_id":"lamp01",
-    "device":{
-        "identifiers":[
-         "lamp01"
+   "name":null,
+   "~":"homeassistant/light/test",
+   "cmd_t":"~/set",
+   "stat_t":"~/state",
+   "schema": "json",
+   "brightness": true,
+   "bri_scl":50,
+   "pl_on": "ON",
+   "pl_off": "OFF",
+   "uniq_id":"lamp04",
+   "dev":{
+      "ids":[
+         "lamp04"
       ],
-    "name":"Lamp_Living_Room"
-    }
+      "name":"Lamp Office 123"
+   }
 }
 ```
 
