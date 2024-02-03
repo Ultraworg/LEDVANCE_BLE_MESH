@@ -1,0 +1,103 @@
+menu "Example Configuration"
+
+    config BROKER_URL
+        string "Broker URL"
+        default "mqtt://mqtt.eclipseprojects.io"
+        help
+            URL of the broker to connect to
+    
+        config BROKER_URL_FROM_STDIN
+            bool
+            default y if BROKER_URL = "FROM_STDIN"
+    
+    config USERNAME_MQTT
+        string "Broker Username"
+        default "User"
+        help
+            Username of the broker to connect to
+    config PASSWORD_MQTT
+        string "Broker Password"
+        default "Pass"
+        help
+            Password of the broker to connect to
+
+    choice BLE_MESH_EXAMPLE_BOARD
+        prompt "Board selection for BLE Mesh"
+        default BLE_MESH_ESP_WROOM_32 if IDF_TARGET_ESP32
+        default BLE_MESH_ESP32C3_DEV if IDF_TARGET_ESP32C3
+        default BLE_MESH_ESP32S3_DEV if IDF_TARGET_ESP32S3
+        default BLE_MESH_ESP32C6_DEV if IDF_TARGET_ESP32C6
+        help
+            Select this option to choose the board for BLE Mesh. The default is ESP32-WROOM-32
+
+        config BLE_MESH_ESP_WROOM_32
+            bool "ESP32-WROOM-32"
+            depends on IDF_TARGET_ESP32
+
+        config BLE_MESH_ESP_WROVER
+            bool "ESP32-WROVER"
+            depends on IDF_TARGET_ESP32
+
+        config BLE_MESH_ESP32C3_DEV
+            bool "ESP32C3-DevKitC"
+            depends on IDF_TARGET_ESP32C3
+
+        config BLE_MESH_ESP32S3_DEV
+            bool "ESP32S3-DevKitC"
+            depends on IDF_TARGET_ESP32S3
+
+        config BLE_MESH_ESP32C6_DEV
+            bool "ESP32C6-DevKitC"
+            depends on IDF_TARGET_ESP32C6
+
+        config BLE_MESH_ESP32H2_DEV
+            bool "ESP32H2-DevKitC"
+            depends on IDF_TARGET_ESP32H2
+
+    endchoice
+
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) for the example to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA or WPA2) for the example to use.
+
+    config ESP_MAXIMUM_RETRY
+        int "Maximum retry"
+        default 5
+        help
+            Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+
+    choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD
+        prompt "WiFi Scan auth mode threshold"
+        default ESP_WIFI_AUTH_WPA2_PSK
+        help
+            The weakest authmode to accept in the scan mode.
+            This value defaults to ESP_WIFI_AUTH_WPA2_PSK incase password is present and ESP_WIFI_AUTH_OPEN is used.
+            Please select ESP_WIFI_AUTH_WEP/ESP_WIFI_AUTH_WPA_PSK incase AP is operating in WEP/WPA mode.
+
+        config ESP_WIFI_AUTH_OPEN
+            bool "OPEN"
+        config ESP_WIFI_AUTH_WEP
+            bool "WEP"
+        config ESP_WIFI_AUTH_WPA_PSK
+            bool "WPA PSK"
+        config ESP_WIFI_AUTH_WPA2_PSK
+            bool "WPA2 PSK"
+        config ESP_WIFI_AUTH_WPA_WPA2_PSK
+            bool "WPA/WPA2 PSK"
+        config ESP_WIFI_AUTH_WPA3_PSK
+            bool "WPA3 PSK"
+        config ESP_WIFI_AUTH_WPA2_WPA3_PSK
+            bool "WPA2/WPA3 PSK"
+        config ESP_WIFI_AUTH_WAPI_PSK
+            bool "WAPI PSK"
+    endchoice
+
+endmenu
