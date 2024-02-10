@@ -40,6 +40,7 @@ https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.ht
 
 I have not yet wrote the code to create the entities in Home Assistant so for now the config message has to be sent manually with any MQTT client.
 I used [MQTTX](https://mqttx.app/)
+--> There is now a section for the discovery message in the code. It will send the discovery message once it receives a mqtt message for the homeassistant/status topic
 
 Example config message:
 
