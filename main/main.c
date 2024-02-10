@@ -392,6 +392,44 @@ static esp_err_t ble_mesh_init(void)
     return err;
 }
 
+typedef struct {
+    const char *topic;
+    char *payload; // Dynamic payload
+} MqttMessage;
+
+// Function to create MQTT payload dynamically using cJSON
+char *createPayload(const char *variable1, const char *variable2, const char *variable3) {
+    // Create cJSON object dynamically
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        fprintf(stderr, "Failed to create cJSON object\n");
+        exit(EXIT_FAILURE);
+    }
+    cJSON *ids = NULL;
+    ids = cJSON_CreateArray();
+    cJSON_AddItemToObject(root, "name", cJSON_CreateString(variable1));
+    cJSON_AddItemToObject(root, "~", cJSON_CreateString(variable2));
+    cJSON_AddItemToObject(root, "cmd_t", cJSON_CreateString("~/set"));
+    cJSON_AddItemToObject(root, "stat_t", cJSON_CreateString("~/state"));
+    cJSON_AddItemToObject(root, "schema", cJSON_CreateString("json"));
+    cJSON_AddItemToObject(root, "brightness", cJSON_CreateBool(true));
+    cJSON_AddItemToObject(root, "bri_scl", cJSON_CreateNumber(50));
+    cJSON_AddItemToObject(root, "pl_on", cJSON_CreateString("ON"));
+    cJSON_AddItemToObject(root, "pl_off", cJSON_CreateString("OFF"));
+    cJSON_AddItemToObject(root, "uniq_id", cJSON_CreateString(variable3));
+    cJSON *dev = cJSON_CreateObject();
+    
+    cJSON_AddItemToObject(root, "dev", dev);
+    cJSON_AddItemToArray(ids, cJSON_CreateString(variable3));
+    cJSON_AddItemToObject(dev, "ids", ids);
+    cJSON_AddItemToObject(dev, "name", cJSON_CreateString("Lamp"));
+
+    char *string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    
+    return string;
+}
+
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGI(TAG, "Event dispatched from event loop" );
@@ -427,7 +465,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT_EVENT_DATA");
                             
-            
             bool setMessage = 0;
             uint16_t net_addr = 0xFFFF;
             char *ha_topic = "test";
@@ -485,68 +522,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             if (strncmp("homeassistant/status", event->topic, 20) == 0) 
             {
-                /*
-            {
-   "name":null,
-   "~":"homeassistant/light/test",
-   "cmd_t":"~/set",
-   "stat_t":"~/state", 
-   "schema": "json",
-   "brightness": true,
-   "bri_scl":50,
-   "pl_on": "ON",
-   "pl_off": "OFF",
-   "uniq_id":"lamp04",
-   "dev":{
-      "ids":[
-         "lamp04"
-      ],
-      "name":"Lamp Office 123"
-   }
-
-}
-            */ 
-           cJSON *ids = NULL;
-           ids = cJSON_CreateArray();
-            /* create root node */
-            cJSON *root = cJSON_CreateObject();
-                cJSON_AddItemToObject(root, "name", cJSON_CreateString("Living Room"));
-                cJSON_AddItemToObject(root, "~", cJSON_CreateString("homeassistant/light/living"));
-                cJSON_AddItemToObject(root, "cmd_t", cJSON_CreateString("~/set"));
-                cJSON_AddItemToObject(root, "stat_t", cJSON_CreateString("~/state"));
-                cJSON_AddItemToObject(root, "schema", cJSON_CreateString("json"));
-                cJSON_AddItemToObject(root, "brightness", cJSON_CreateBool(true));
-                cJSON_AddItemToObject(root, "bri_scl", cJSON_CreateNumber(50));
-                cJSON_AddItemToObject(root, "pl_on", cJSON_CreateString("ON"));
-                cJSON_AddItemToObject(root, "pl_off", cJSON_CreateString("OFF"));
-                cJSON_AddItemToObject(root, "uniq_id", cJSON_CreateString("lamp01"));
-                cJSON *dev = cJSON_CreateObject();
-                
-                cJSON_AddItemToObject(root, "dev", dev);
-                cJSON_AddItemToArray(ids, cJSON_CreateString("lamp01"));
-                cJSON_AddItemToObject(dev, "ids", ids);
-                cJSON_AddItemToObject(dev, "name", cJSON_CreateString("Lamp"));
-
-                char *string = cJSON_PrintUnformatted(root);
-                esp_mqtt_client_publish(client, "homeassistant/light/living/config", string, 0, 0, 0);
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "name", cJSON_CreateString("Office"));
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "~", cJSON_CreateString("homeassistant/light/office"));
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "uniq_id", cJSON_CreateString("lamp02"));
-                cJSON_ReplaceItemInArray(ids, 0, cJSON_CreateString("lamp02"));
-                char *modified_json = cJSON_PrintUnformatted(root);
-                esp_mqtt_client_publish(client, "homeassistant/light/office/config", modified_json, 0, 0, 0);
-                
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "name", cJSON_CreateString("Flur"));
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "~", cJSON_CreateString("homeassistant/light/flur"));
-                cJSON_ReplaceItemInObjectCaseSensitive(root, "uniq_id", cJSON_CreateString("lamp03"));
-                cJSON_ReplaceItemInArray(ids, 0, cJSON_CreateString("lamp03"));
-                char *modified_json2 = cJSON_PrintUnformatted(root);
-                esp_mqtt_client_publish(client, "homeassistant/light/flur/config", modified_json2, 0, 0, 0);
-                // Delete the cJSON object
-                cJSON_Delete(root);
-             //   example_ble_mesh_send_gen_brightness_set(bright, 0x0007);
+                // Create MQTT messages with dynamically generated payloads
+                MqttMessage messages[] = {
+                    {"homeassistant/light/living/config", createPayload("Living Room", "homeassistant/light/living", "lamp01")},
+                    {"homeassistant/light/office/config", createPayload("Office", "homeassistant/light/office", "lamp02")},
+                    {"homeassistant/light/flur/config", createPayload("Flur", "homeassistant/light/flur", "lamp03")}
+                    // Add more messages here as needed
+                };
+                // Publish MQTT messages
+                for (size_t i = 0; i < sizeof(messages) / sizeof(messages[0]); ++i) {
+                    // Publish each message
+                    printf("Publishing to topic: %s, payload: %s\n", messages[i].topic, messages[i].payload);
+                    // Call your MQTT publishing function here passing messages[i].topic and payload_str
+                    esp_mqtt_client_publish(client, messages[i].topic, messages[i].payload, 0, 0, 0);
+                }
             }
-            
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
