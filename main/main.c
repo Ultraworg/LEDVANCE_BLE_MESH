@@ -65,6 +65,10 @@
 #define ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD WIFI_AUTH_WAPI_PSK
 #endif
 
+#define LIVING_LAMP 0x0013
+#define OFFICE_LAMP 0x0014
+#define FLUR_LAMP 0x0007
+
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 /* The event group allows multiple bits for each event, but we only care about two events:
@@ -230,19 +234,44 @@ static void example_ble_mesh_provisioning_cb(esp_ble_mesh_prov_cb_event_t event,
     }
 }
 
+void ble_mesh_get_gen_onoff_status(uint16_t a_addr)
+{
+    esp_ble_mesh_generic_client_get_state_t get = {0};
+    esp_ble_mesh_client_common_param_t common = {0};
+    esp_err_t err = ESP_OK;
+
+    common.opcode = ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_GET;
+    common.model = onoff_client.model;
+    common.ctx.net_idx = store.net_idx;
+    common.ctx.app_idx = store.app_idx;
+    common.ctx.addr = a_addr;   /* Address of the server whose status is requested */
+    common.ctx.send_ttl = 4;
+    common.ctx.send_rel = true;
+    common.msg_timeout = 0;     /* 0 indicates that timeout value from menuconfig will be used */
+    common.msg_role = ROLE_NODE;
+
+    err = esp_ble_mesh_generic_client_get_state(&common, &get);
+    if (err) {
+        ESP_LOGE(TAG, "Get Generic OnOff State failed");
+        return;
+    }
+
+    // Handle the response in the callback function registered for the Generic OnOff Client model.
+}
+
 void example_ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
 {
     esp_ble_mesh_generic_client_set_state_t set = {0};
     esp_ble_mesh_client_common_param_t common = {0};
     esp_err_t err = ESP_OK;
 
-    common.opcode = ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET_UNACK;
+    common.opcode = ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET;
     common.model = onoff_client.model;
     common.ctx.net_idx = store.net_idx;
     common.ctx.app_idx = store.app_idx;
     common.ctx.addr = a_addr;   /* to all nodes = 0xFFFF */
-    common.ctx.send_ttl = 3;
-    common.ctx.send_rel = false;
+    common.ctx.send_ttl = 4;
+    common.ctx.send_rel = true;
     common.msg_timeout = 0;     /* 0 indicates that timeout value from menuconfig will be used */
     common.msg_role = ROLE_NODE;
 
@@ -255,9 +284,9 @@ void example_ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
         ESP_LOGE(TAG, "Send Generic OnOff Set Unack failed");
         return;
     }
-
-    store.onoff = !store.onoff;
-    mesh_example_info_store(); /* Store proper mesh example info */
+    //ble_mesh_get_gen_onoff_status(a_addr);
+    //store.onoff = !store.onoff;
+    //mesh_example_info_store(); /* Store proper mesh example info */
 }
 
 void example_ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr, esp_mqtt_client_handle_t a_client, char* a_topic)
@@ -287,6 +316,7 @@ void example_ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr,
         ESP_LOGE(TAG, "Send Light Lightness Set Unack failed");
         return;
     }
+    //ble_mesh_get_gen_onoff_status(a_addr);
     // build JSON for home assistant
     cJSON_AddItemToObject(root, "state", cJSON_CreateString("ON"));
     cJSON_AddItemToObject(root, "brightness", cJSON_CreateNumber(a_brightness));
@@ -321,12 +351,50 @@ static void example_ble_mesh_generic_client_cb(esp_ble_mesh_generic_client_cb_ev
         break;
     case ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT:
         ESP_LOGI(TAG, "ESP_BLE_MESH_GENERIC_CLIENT_PUBLISH_EVT");
+        if (param->params->ctx.recv_op == ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_STATUS) {
+            ESP_LOGI(TAG, "ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_STATUS, onoff %d", param->status_cb.onoff_status.present_onoff);
+            // Get the address of the device that sent the response
+            uint16_t sender_addr = param->params->ctx.addr;
+            cJSON *root = cJSON_CreateObject();
+            // Extract and handle the response as needed
+            uint8_t onoff_state = param->status_cb.onoff_status.present_onoff;
+            ESP_LOGI(TAG, "Received Generic OnOff Get response from device 0x%X. OnOff State: %d", sender_addr, onoff_state);
+
+            cJSON_AddItemToObject(root, "state", cJSON_CreateNumber(onoff_state));
+            
+            char *ha_topic = "test";
+            // Use a switch statement to determine which lamp the response corresponds to
+            switch (sender_addr) {
+                case LIVING_LAMP:
+                    ha_topic = "homeassistant/light/living/state";
+                    break;
+                case OFFICE_LAMP:
+                    ha_topic = "homeassistant/light/office/state";
+                    break;
+                case FLUR_LAMP:
+                    ha_topic = "homeassistant/light/flur/state";
+                    break;
+                default:
+                    // Unknown sender address
+                    ESP_LOGW(TAG, "Received Generic OnOff Get response from unknown device");
+                    break;
+            }
+            
+            // Access the global MQTT client instance
+            if (client_test == NULL) {
+                ESP_LOGE(TAG, "MQTT client not initialized!");
+                return;
+            }
+            char *string = cJSON_PrintUnformatted(root);
+            cJSON_Delete(root);
+            esp_mqtt_client_publish(client_test, ha_topic, string, 0, 0, 0);
+        }
         break;
     case ESP_BLE_MESH_GENERIC_CLIENT_TIMEOUT_EVT:
         ESP_LOGI(TAG, "ESP_BLE_MESH_GENERIC_CLIENT_TIMEOUT_EVT");
         if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET) {
             /* If failed to get the response of Generic OnOff Set, resend Generic OnOff Set  */
-            example_ble_mesh_send_gen_onoff_set(store.onoff, 0xFFFF);
+            //example_ble_mesh_send_gen_onoff_set(store.onoff, 0xFFFF);
         }
         break;
     default:
@@ -470,20 +538,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             char *ha_topic = "test";
             
             if (strncmp("homeassistant/light/office/set", event->topic, 30) == 0) {
-                net_addr = 0x0014;
+                net_addr = OFFICE_LAMP;
                 ha_topic = "homeassistant/light/office/state";
                 setMessage = 1;
             }
             else if (strncmp("homeassistant/light/flur/set", event->topic, 28) == 0) 
             {
-                net_addr = 0x0007;
+                net_addr = FLUR_LAMP;
                 ha_topic = "homeassistant/light/flur/state";
                 setMessage = 1;
             }
             else if (strncmp("homeassistant/light/living/set", event->topic, 30) == 0) 
             {
                 ESP_LOGI(TAG, "Living room lamp"); 
-                net_addr = 0x0013;
+                net_addr = LIVING_LAMP;
                 ha_topic = "homeassistant/light/living/state"; 
                 setMessage = 1;
             }  
@@ -536,6 +604,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     // Call your MQTT publishing function here passing messages[i].topic and payload_str
                     esp_mqtt_client_publish(client, messages[i].topic, messages[i].payload, 0, 0, 0);
                 }
+                //get current status of all lights
+                ble_mesh_get_gen_onoff_status(0xFFFF);
             }
             break;
         case MQTT_EVENT_ERROR:
