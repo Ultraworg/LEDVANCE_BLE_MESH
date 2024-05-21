@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
-#include "cJSON.h" // newly added
+#include "cJSON.h"
 
 #include "esp_log.h"
 #include "nvs_flash.h"
@@ -43,6 +43,16 @@
 #include "lwip/netdb.h"
 #include "mqtt_client.h"
 
+#include "esp_http_server.h"
+
+#include "lamp_nvs.h"
+#include "http_server.h"
+
+// Define web server URI
+#define EXAMPLE_URI "/control"
+// Define the maximum number of lamps
+#define MAX_LAMPS 20
+
 #define ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
 #define ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
 #define ESP_MAXIMUM_RETRY  CONFIG_ESP_MAXIMUM_RETRY
@@ -67,7 +77,10 @@
 
 #define LIVING_LAMP 0x0013
 #define OFFICE_LAMP 0x0014
-#define FLUR_LAMP 0x0007
+#define FLUR_LAMP 0x0015
+
+// Global variable to store the current number of lamps
+int g_num_lamps = 0;
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -78,13 +91,13 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT      BIT1
 static int s_retry_num = 0;
 
-#define TAG "EXAMPLE"
+#define TAG "LIGHT"
 
 #define CID_ESP 0x02E5
 
-static uint8_t dev_uuid[16] = { 0xdd, 0xdd };
+static uint8_t dev_uuid[16] = { 0xcc, 0xcc };
 
-esp_mqtt_client_handle_t client_test;
+esp_mqtt_client_handle_t mqtt_client;
 
 static struct example_info_store {
     uint16_t net_idx;   /* NetKey Index */
@@ -120,10 +133,10 @@ static esp_ble_mesh_cfg_srv_t config_server = {
 #else
     .gatt_proxy = ESP_BLE_MESH_GATT_PROXY_NOT_SUPPORTED,
 #endif
-    .default_ttl = 7,
+    .default_ttl = 10,
     /* 3 transmissions with 20ms interval */
-    .net_transmit = ESP_BLE_MESH_TRANSMIT(2, 20),
-    .relay_retransmit = ESP_BLE_MESH_TRANSMIT(2, 20),
+    .net_transmit = ESP_BLE_MESH_TRANSMIT(4, 20),
+    .relay_retransmit = ESP_BLE_MESH_TRANSMIT(4, 20),
 };
 
 ESP_BLE_MESH_MODEL_PUB_DEFINE(onoff_cli_pub, 2 + 1, ROLE_NODE);
@@ -161,12 +174,12 @@ static esp_ble_mesh_prov_t provision = {
 #endif
 };
 
-static void mesh_example_info_store(void)
+static void mesh_info_store(void)
 {
     ble_mesh_nvs_store(NVS_HANDLE, NVS_KEY, &store, sizeof(store));
 }
 
-static void mesh_example_info_restore(void)
+static void mesh_info_restore(void)
 {
     esp_err_t err = ESP_OK;
     bool exist = false;
@@ -186,10 +199,10 @@ static void prov_complete(uint16_t net_idx, uint16_t addr, uint8_t flags, uint32
 {
     ESP_LOGI(TAG, "net_idx: 0x%04x, addr: 0x%04x", net_idx, addr);
     ESP_LOGI(TAG, "flags: 0x%02x, iv_index: 0x%08" PRIx32, flags, iv_index);
-    board_led_operation(LED_G, LED_OFF);
+    board_led_operation(GPIO_NUM_2, 0);
     ESP_LOGW(TAG, "LEDs_OFF provisioning completed");
     store.net_idx = net_idx;
-    /* mesh_example_info_store() shall not be invoked here, because if the device
+    /* mesh_info_store() shall not be invoked here, because if the device
      * is restarted and goes into a provisioned state, then the following events
      * will come:
      * 1st: ESP_BLE_MESH_NODE_PROV_COMPLETE_EVT
@@ -206,7 +219,7 @@ static void example_ble_mesh_provisioning_cb(esp_ble_mesh_prov_cb_event_t event,
     switch (event) {
     case ESP_BLE_MESH_PROV_REGISTER_COMP_EVT:
         ESP_LOGI(TAG, "ESP_BLE_MESH_PROV_REGISTER_COMP_EVT, err_code %d", param->prov_register_comp.err_code);
-        mesh_example_info_restore(); /* Restore proper mesh example info */
+        mesh_info_restore(); /* Restore proper mesh info */
         break;
     case ESP_BLE_MESH_NODE_PROV_ENABLE_COMP_EVT:
         ESP_LOGI(TAG, "ESP_BLE_MESH_NODE_PROV_ENABLE_COMP_EVT, err_code %d", param->node_prov_enable_comp.err_code);
@@ -245,7 +258,7 @@ void ble_mesh_get_gen_onoff_status(uint16_t a_addr)
     common.ctx.net_idx = store.net_idx;
     common.ctx.app_idx = store.app_idx;
     common.ctx.addr = a_addr;   /* Address of the server whose status is requested */
-    common.ctx.send_ttl = 4;
+    common.ctx.send_ttl = 10;
     common.ctx.send_rel = true;
     common.msg_timeout = 0;     /* 0 indicates that timeout value from menuconfig will be used */
     common.msg_role = ROLE_NODE;
@@ -259,7 +272,7 @@ void ble_mesh_get_gen_onoff_status(uint16_t a_addr)
     // Handle the response in the callback function registered for the Generic OnOff Client model.
 }
 
-void example_ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
+void ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
 {
     esp_ble_mesh_generic_client_set_state_t set = {0};
     esp_ble_mesh_client_common_param_t common = {0};
@@ -270,7 +283,7 @@ void example_ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
     common.ctx.net_idx = store.net_idx;
     common.ctx.app_idx = store.app_idx;
     common.ctx.addr = a_addr;   /* to all nodes = 0xFFFF */
-    common.ctx.send_ttl = 4;
+    common.ctx.send_ttl = 10;
     common.ctx.send_rel = true;
     common.msg_timeout = 0;     /* 0 indicates that timeout value from menuconfig will be used */
     common.msg_role = ROLE_NODE;
@@ -284,12 +297,9 @@ void example_ble_mesh_send_gen_onoff_set(int a_state, uint16_t a_addr)
         ESP_LOGE(TAG, "Send Generic OnOff Set Unack failed");
         return;
     }
-    //ble_mesh_get_gen_onoff_status(a_addr);
-    //store.onoff = !store.onoff;
-    //mesh_example_info_store(); /* Store proper mesh example info */
 }
 
-void example_ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr, esp_mqtt_client_handle_t a_client, char* a_topic)
+void ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr, esp_mqtt_client_handle_t a_client, char* a_topic)
 {
     esp_ble_mesh_light_client_set_state_t set = {0};
     esp_ble_mesh_client_common_param_t common = {0};
@@ -302,8 +312,8 @@ void example_ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr,
     common.ctx.net_idx = store.net_idx;
     common.ctx.app_idx = store.app_idx;
     common.ctx.addr = a_addr;   /* to all nodes= 0xFFFF*/
-    common.ctx.send_ttl = 3;
-    common.ctx.send_rel = false;
+    common.ctx.send_ttl = 10;
+    common.ctx.send_rel = true;
     common.msg_timeout = 0;     /* 0 indicates that timeout value from menuconfig will be used */
     common.msg_role = ROLE_NODE;
 
@@ -327,7 +337,7 @@ void example_ble_mesh_send_gen_brightness_set(int a_brightness, uint16_t a_addr,
 
     store.brightness = a_brightness;
    // store.onoff = !store.onoff;
-    mesh_example_info_store(); /* Store proper mesh example info */
+    mesh_info_store(); /* Store proper mesh info */
 }
 
 static void example_ble_mesh_generic_client_cb(esp_ble_mesh_generic_client_cb_event_t event,
@@ -362,39 +372,47 @@ static void example_ble_mesh_generic_client_cb(esp_ble_mesh_generic_client_cb_ev
 
             cJSON_AddItemToObject(root, "state", cJSON_CreateNumber(onoff_state));
             
-            char *ha_topic = "test";
-            // Use a switch statement to determine which lamp the response corresponds to
-            switch (sender_addr) {
-                case LIVING_LAMP:
-                    ha_topic = "homeassistant/light/living/state";
-                    break;
-                case OFFICE_LAMP:
-                    ha_topic = "homeassistant/light/office/state";
-                    break;
-                case FLUR_LAMP:
-                    ha_topic = "homeassistant/light/flur/state";
-                    break;
-                default:
-                    // Unknown sender address
-                    ESP_LOGW(TAG, "Received Generic OnOff Get response from unknown device");
-                    break;
+            char ha_topic = "test";
+            bool found = false;
+
+            // Iterate through all lamps in NVS
+            for (int i = 0; i < MAX_LAMPS; i++) {
+                LampInfo lamp_info;
+                esp_err_t err = load_lamp_info(&lamp_info, i);
+                if (err == ESP_OK) {
+                    // Compare lamp address with sender address
+                    if (lamp_info.address == sender_addr) {
+                        // Match found, set appropriate topic
+                        char topic_state[100];
+                        snprintf(topic_state, sizeof(topic_state), "homeassistant/light/%s/state", lamp_info.name);
+                        ha_topic = topic_state;
+                        found = true;
+                        break;  // Exit loop once a match is found
+                    }
+                }
+            }
+
+            if (!found) {
+                // Unknown sender address or no matching lamp found
+                ESP_LOGW(TAG, "Received Generic OnOff Get response from unknown device");
+                return;
             }
             
             // Access the global MQTT client instance
-            if (client_test == NULL) {
+            if (mqtt_client == NULL) {
                 ESP_LOGE(TAG, "MQTT client not initialized!");
                 return;
             }
             char *string = cJSON_PrintUnformatted(root);
             cJSON_Delete(root);
-            esp_mqtt_client_publish(client_test, ha_topic, string, 0, 0, 0);
+            esp_mqtt_client_publish(mqtt_client, ha_topic, string, 0, 0, 0);
         }
         break;
     case ESP_BLE_MESH_GENERIC_CLIENT_TIMEOUT_EVT:
         ESP_LOGI(TAG, "ESP_BLE_MESH_GENERIC_CLIENT_TIMEOUT_EVT");
         if (param->params->opcode == ESP_BLE_MESH_MODEL_OP_GEN_ONOFF_SET) {
             /* If failed to get the response of Generic OnOff Set, resend Generic OnOff Set  */
-            //example_ble_mesh_send_gen_onoff_set(store.onoff, 0xFFFF);
+            //ble_mesh_send_gen_onoff_set(store.onoff, 0xFFFF);
         }
         break;
     default:
@@ -424,7 +442,7 @@ static void example_ble_mesh_config_server_cb(esp_ble_mesh_cfg_server_cb_event_t
             if (param->value.state_change.mod_app_bind.company_id == 0xFFFF &&
                 param->value.state_change.mod_app_bind.model_id == ESP_BLE_MESH_MODEL_ID_GEN_ONOFF_CLI) {
                 store.app_idx = param->value.state_change.mod_app_bind.app_idx;
-                mesh_example_info_store(); /* Store proper mesh example info */
+                mesh_info_store(); /* Store proper mesh info */
             }
             break;
         default:
@@ -455,7 +473,7 @@ static esp_err_t ble_mesh_init(void)
 
     ESP_LOGI(TAG, "BLE Mesh Node initialized");
 
-    board_led_operation(LED_G, LED_OFF);
+    board_led_operation(2, LED_OFF);
 
     return err;
 }
@@ -503,19 +521,25 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     ESP_LOGI(TAG, "Event dispatched from event loop" );
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
-    client_test = event->client;
+    mqtt_client = event->client;
     int msg_id;
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             msg_id = esp_mqtt_client_subscribe(client, "homeassistant/status", 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-            msg_id = esp_mqtt_client_subscribe(client, "homeassistant/light/flur/set", 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-            msg_id = esp_mqtt_client_subscribe(client, "homeassistant/light/living/set", 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-            msg_id = esp_mqtt_client_subscribe(client, "homeassistant/light/office/set", 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+            ESP_LOGI(TAG, "Subscribed to homeassistant/status, msg_id=%d", msg_id);
+            // Load lamp names from NVS and subscribe to corresponding MQTT topics
+            for (int i = 0; i < MAX_LAMPS; i++) {
+                LampInfo lamp_info;
+                esp_err_t err = load_lamp_info(&lamp_info, i);
+                if (err == ESP_OK) {
+                    char topic[100];
+                    snprintf(topic, sizeof(topic), "homeassistant/light/%s/set", lamp_info.name);
+                    int msg_id = esp_mqtt_client_subscribe(client, topic, 0);
+                    ESP_LOGI(TAG, "Subscribed to %s, msg_id=%d", topic, msg_id);
+                }
+            }
+            esp_mqtt_client_publish(client, "homeassistant/status", "", 0, 0, 0);
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -529,33 +553,44 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_PUBLISHED:
             ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
             break;
-
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT_EVENT_DATA");
                             
             bool setMessage = 0;
             uint16_t net_addr = 0xFFFF;
-            char *ha_topic = "test";
+            char *ha_topic = "abc";
+            ESP_LOGI(TAG, "Found lamps %d", g_num_lamps);
+            // Iterate through all lamps in NVS
+            for (int i = 0; i < MAX_LAMPS; i++) {
+                ESP_LOGI(TAG, "Found lamps %d", i);
+                LampInfo lamp_info;
+                esp_err_t err = load_lamp_info(&lamp_info, i);
+                if (err == ESP_OK) {
+                    // Dynamically generate MQTT topics based on lamp names
+                    char topic_set[100];
+                    snprintf(topic_set, sizeof(topic_set), "homeassistant/light/%s/set", lamp_info.name);
+
+                    // Compare MQTT topic with dynamically generated topics
+                    if (strncmp(topic_set, event->topic, strlen(topic_set)) == 0) {
+                        // Match found, set appropriate values
+                        char *endptr;
+                        net_addr = (uint16_t)strtol(lamp_info.address, &endptr, 0);
+                        if (*endptr != '\0') {
+                            // Handle conversion error
+                            ESP_LOGE("TAG", "Failed to convert lamp_info.address to integer");
+                            // Optionally, you can set a default value for net_addr or handle the error in another way
+                        }
+                        char topic_state[100];
+                        snprintf(topic_state, sizeof(topic_state), "homeassistant/light/%s/state", lamp_info.name);
+                        ha_topic = topic_state;
+                        setMessage = true;
+                        ESP_LOGI(TAG, "Found msg to %s, %s, %d", lamp_info.name, topic_state, net_addr);
+                        break;  // Exit loop once a match is found
+                    }
+                }
+            }
             
-            if (strncmp("homeassistant/light/office/set", event->topic, 30) == 0) {
-                net_addr = OFFICE_LAMP;
-                ha_topic = "homeassistant/light/office/state";
-                setMessage = 1;
-            }
-            else if (strncmp("homeassistant/light/flur/set", event->topic, 28) == 0) 
-            {
-                net_addr = FLUR_LAMP;
-                ha_topic = "homeassistant/light/flur/state";
-                setMessage = 1;
-            }
-            else if (strncmp("homeassistant/light/living/set", event->topic, 30) == 0) 
-            {
-                ESP_LOGI(TAG, "Living room lamp"); 
-                net_addr = LIVING_LAMP;
-                ha_topic = "homeassistant/light/living/state"; 
-                setMessage = 1;
-            }  
-            if (setMessage){
+           if (setMessage){
                 //parse received json data
                 cJSON *json = cJSON_Parse(event->data);
                 if (json == NULL) 
@@ -573,14 +608,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 if (cJSON_IsNumber(brightness)) {
                     //printf("brightness: %d\n", brightness->valueint);
                     int bright = brightness->valueint;
-                    example_ble_mesh_send_gen_brightness_set(bright, net_addr, client, ha_topic);
+                    ble_mesh_send_gen_brightness_set(bright, net_addr, client, ha_topic);
                 }
                 else if(strncmp("ON",actstate->valuestring,2)==0){
-                    example_ble_mesh_send_gen_onoff_set(1, net_addr);
+                    ble_mesh_send_gen_onoff_set(1, net_addr);
                     esp_mqtt_client_publish(client, ha_topic, "{\"state\":\"ON\"}", 0, 0, 0);
                 }
                 else if(strncmp("OFF",actstate->valuestring,3)==0){
-                    example_ble_mesh_send_gen_onoff_set(0, net_addr);
+                    ble_mesh_send_gen_onoff_set(0, net_addr);
                     esp_mqtt_client_publish(client, ha_topic, "{\"state\":\"OFF\"}", 0, 0, 0);
                 }
                 //printf("DATA=%.*s\r\n", event->data_len, event->data); 
@@ -590,22 +625,39 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             if (strncmp("homeassistant/status", event->topic, 20) == 0) 
             {
-                // Create MQTT messages with dynamically generated payloads
-                MqttMessage messages[] = {
-                    {"homeassistant/light/living/config", createPayload("Living Room", "homeassistant/light/living", "lamp01")},
-                    {"homeassistant/light/office/config", createPayload("Office", "homeassistant/light/office", "lamp02")},
-                    {"homeassistant/light/flur/config", createPayload("Flur", "homeassistant/light/flur", "lamp03")}
-                    // Add more messages here as needed
-                };
-                // Publish MQTT messages
-                for (size_t i = 0; i < sizeof(messages) / sizeof(messages[0]); ++i) {
+                // Fetch lamp data from NVS and generate MQTT messages
+                for (int i = 0; i < MAX_LAMPS; i++) {
+                ESP_LOGI(TAG, "Found lamps %d", i);
+                        
+                // Load lamp info from NVS
+                LampInfo lamp_info;
+                esp_err_t err = load_lamp_info(&lamp_info, i);
+                if (err == ESP_OK) {
+                    // Generate MQTT message for this lamp
+                    char topic[100];
+                    char config_topic[100];
+                    char payload[500];  // Adjust size as needed
+                
+                    // Create unique topic for this lamp (adjust as per your requirement)
+                    snprintf(topic, sizeof(topic), "homeassistant/light/%s", lamp_info.name);
+
+                    // Create config topic for this lamp (adjust as per your requirement)
+                    snprintf(config_topic, sizeof(config_topic), "homeassistant/light/%s/config", lamp_info.name);
+
+                    // Create payload for this lamp
+                    snprintf(payload, sizeof(payload), createPayload(lamp_info.name, topic, lamp_info.address));
+                    
                     // Publish each message
-                    printf("Publishing to topic: %s, payload: %s\n", messages[i].topic, messages[i].payload);
+                    printf("Publishing to topic: %s, payload: %s\n", config_topic, payload);
                     // Call your MQTT publishing function here passing messages[i].topic and payload_str
-                    esp_mqtt_client_publish(client, messages[i].topic, messages[i].payload, 0, 0, 0);
+                    esp_mqtt_client_publish(client, config_topic, payload, 0, 0, 0);
+                } else {
+                    // Failed to load lamp info, break loop
+                    break;
                 }
+            }
                 //get current status of all lights
-                ble_mesh_get_gen_onoff_status(0xFFFF);
+                //ble_mesh_get_gen_onoff_status(0xFFFF);
             }
             break;
         case MQTT_EVENT_ERROR:
@@ -786,6 +838,12 @@ void app_main(void)
         ESP_LOGE(TAG, "Bluetooth mesh init failed (err %d)", err);
     }
     mqtt_app_start();
+
+    // Retrieve the current number of lamps from NVS and store it in the global variable
+    g_num_lamps = getCurrentNumberOfLamps();
+    // Start the web server
+    //httpd_handle_t server = start_webserver();
+    start_webserver();
     
 }
 

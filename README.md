@@ -21,7 +21,7 @@ https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.ht
 ## Instructions:
 1. Provision the lamps with the nRF Connect App (they need to be in pairing mode to be provisioned)
 2. In the App, assign it an Application Key
-3. In the Elements of the App, assign an Application Key to the following Elements:
+3. In the Elements of the App, assign the same Application Key to the following Elements:
 (Not sure if all of them are really required but this is how it works for me)
    1. Generic OnOff Server
    2. Generic Level Server
@@ -30,17 +30,16 @@ https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.ht
 4. The lamp will now have an Unicast Address -> take a note of this
 5. Repeat the steps above for all your lamps
 6. Clone the repository
-7. Adopt the sdkconfig with your WIFI password and the Home Assistant credentials (create a new User in HA to use with MQTT) & rename the file to sdkconfig
-8. Adopt the `mqtt_event_handler` function in the `main.c` file to the Unicast Addresses of your lamps
-9.  Build and flash the project to your ESP
-10. Provision the ESP -> same as Steps 1-3, with the following Elements:
+7. Adopt the sdkconfig example with your WIFI password and the Home Assistant credentials (create a new User in HA to use with MQTT) & rename the file to sdkconfig
+8. Build and flash the project to your ESP
+9. Open the IP address of your ESP and add your lights on the homepage. Name & Unicast Address (from Step 4) are required (whenever new lamps are  added, the ESP will require a restart so that the MQTT subscribes also to the newly added lights)
+10. Restart the ESP32 to load the new config at startup
+11. Provision the ESP -> same as Steps 1-3, with the following Elements:
     1.  Generic OnOff Client
     2.  Generic Level Client
     3.  Light Lightness Client
 
-I have not yet wrote the code to create the entities in Home Assistant so for now the config message has to be sent manually with any MQTT client.
-I used [MQTTX](https://mqttx.app/)
---> There is now a section for the discovery message in the code. It will send the discovery message once it receives a mqtt message for the homeassistant/status topic
+
 
 Example config message:
 
@@ -64,7 +63,7 @@ Payload:
       "ids":[
          "lamp04"
       ],
-      "name":"Lamp Office 123"
+      "name":"Lamp Office"
    }
 }
 ```
