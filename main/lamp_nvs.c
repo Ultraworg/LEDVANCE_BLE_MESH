@@ -2,257 +2,219 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include "cJSON.h"
 #include <string.h>
+#include <stdlib.h>
 
-// Define the maximum number of lamps
 #define MAX_LAMPS 20
-
 #define TAG "LAMP_NVS"
+#define NVS_NAMESPACE "lamps"
+#define NVS_KEY "lamp_list"
 
-// Function to save lamp information to NVS
-esp_err_t save_lamp_info(LampInfo *lamp_info, int index) {
+// In-memory cache for fast access
+static LampInfo g_lamp_cache[MAX_LAMPS];
+static int g_lamp_count = 0;
+
+// Forward declaration for internal function
+static esp_err_t _save_to_nvs(void);
+
+/**
+ * @brief Loads the lamp list from the NVS blob into the in-memory cache.
+ */
+static void _load_from_nvs(void) {
     nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READWRITE, &nvs_handle);
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
-        return err;
-    }
-
-    // Write lamp info to NVS
-    char key[20];
-    snprintf(key, sizeof(key), "lamp%d_name", index);
-    err = nvs_set_str(nvs_handle, key, lamp_info->name);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-        return err;
-    }
-
-    snprintf(key, sizeof(key), "lamp%d_address", index);
-    err = nvs_set_str(nvs_handle, key, lamp_info->address);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-        return err;
-    }
-    // Commit changes
-    err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-        return err;
-    }
-
-    // Close NVS handle
-    nvs_close(nvs_handle);
-
-    return ESP_OK;
-}
-
-// Function to load lamp information from NVS
-esp_err_t load_lamp_info(LampInfo *lamp_info, int index) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        return err;
-    }
-    //ESP_LOGI(TAG, "Loading lamp info");
-    // Read lamp info from NVS
-    char key[20];
-    snprintf(key, sizeof(key), "lamp%d_name", index);
-    size_t size = sizeof(lamp_info->name);
-    err = nvs_get_str(nvs_handle, key, lamp_info->name, &size);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-    //    ESP_LOGE(TAG, "Loading lamp info failed for name");
-        return err;
-    }
-    snprintf(key, sizeof(key), "lamp%d_address", index);
-    size = sizeof(lamp_info->address);
-    err = nvs_get_str(nvs_handle, key, lamp_info->address, &size);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-    //    ESP_LOGE(TAG, "Loading lamp info failed for address");
-        return err;
-    }
-
-    // Close NVS handle
-    nvs_close(nvs_handle);
-    //ESP_LOGI(TAG, "Loading done");
-    return ESP_OK;
-}
-
-// Function to find the next free index in the NVS store
-int findNextFreeIndexInNVS() {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return -1;
-    }
-
-    // Iterate through the indices and check for gaps
-    int nextFreeIndex = -1;
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        char key[20];
-        snprintf(key, sizeof(key), "lamp%d_name", i);
-        size_t required_size;
-        err = nvs_get_str(nvs_handle, key, NULL, &required_size);
-        if (err == ESP_ERR_NVS_NOT_FOUND) {
-            // Free index found
-            nextFreeIndex = i;
-            ESP_LOGI(TAG, "Free index found in NVS: %d", nextFreeIndex);
-            break;
-        } else if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Error reading NVS: %s", esp_err_to_name(err));
-            // Error handling, return a negative value
-            nextFreeIndex = -1;
-            break;
-        }
-    }
-
-    // Close the NVS handle
-    nvs_close(nvs_handle);
-
-    return nextFreeIndex;
-}
-
-// Function to remove lamp information from NVS
-esp_err_t remove_lamp_info(int index) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READWRITE, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGI(TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    // Delete lamp info from NVS
-    char key[20];
-    snprintf(key, sizeof(key), "lamp%d_name", index);
-    err = nvs_erase_key(nvs_handle, key);
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-        nvs_close(nvs_handle);
-        ESP_LOGE(TAG, "Error deleting lamp name from NVS: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    snprintf(key, sizeof(key), "lamp%d_address", index);
-    err = nvs_erase_key(nvs_handle, key);
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-        nvs_close(nvs_handle);
-        ESP_LOGE(TAG, "Error deleting lamp address from NVS: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    // Commit changes
-    err = nvs_commit(nvs_handle);
-    if (err != ESP_OK) {
-        nvs_close(nvs_handle);
-        ESP_LOGE(TAG, "Error committing NVS changes: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    // Close NVS handle
-    nvs_close(nvs_handle);
-
-    return ESP_OK;
-}
-
-// Function to find the index of a lamp by its name or address
-int find_index_by_name_or_address(const char *name, const char *address) {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return -1;
-    }
-
-    // Iterate through all lamps
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        LampInfo lamp_info;
-        err = load_lamp_info(&lamp_info, i);
-        if (err != ESP_OK) {
-            continue; // Skip if error loading lamp info
-        }
-
-        // Check if name or address matches
-        if ((name && strcmp(lamp_info.name, name) == 0) || (address && strcmp(lamp_info.address, address) == 0)) {
-            nvs_close(nvs_handle);
-            return i; // Return the index if found
-        }
-    }
-
-    nvs_close(nvs_handle);
-    return -1; // Return -1 if not found
-}
-
-// Function to print all lamp information to console
-void printAllLampInfo() {
-    nvs_handle_t nvs_handle;
-    esp_err_t err;
-
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READONLY, &nvs_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        ESP_LOGI(TAG, "NVS namespace not found, initializing empty lamp list.");
+        g_lamp_count = 0;
         return;
     }
 
-    // Iterate through all lamps
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        // Load lamp information from NVS
-        LampInfo lamp_info;
-        err = load_lamp_info(&lamp_info, i);
-        if (err != ESP_OK) {
-            // If lamp not found or other error, skip to next lamp
-            continue;
-        }
-          // Print lamp name and address
-        ESP_LOGI(TAG, "Lamp %d - Name: %s, Address: %s", i, lamp_info.name, lamp_info.address);
+    size_t required_size = 0;
+    err = nvs_get_blob(nvs_handle, NVS_KEY, NULL, &required_size);
+    if (err == ESP_ERR_NVS_NOT_FOUND || required_size == 0) {
+        ESP_LOGI(TAG, "Lamp list not found in NVS, initializing empty list.");
+        g_lamp_count = 0;
+        nvs_close(nvs_handle);
+        return;
     }
 
-    // Close NVS handle
+    char* json_string = malloc(required_size);
+    if (json_string == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for lamp list JSON!");
+        g_lamp_count = 0;
+        nvs_close(nvs_handle);
+        return;
+    }
+
+    err = nvs_get_blob(nvs_handle, NVS_KEY, json_string, &required_size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read lamp list blob from NVS: %s", esp_err_to_name(err));
+        g_lamp_count = 0;
+    } else {
+        cJSON *root = cJSON_Parse(json_string);
+        if (root != NULL && cJSON_IsArray(root)) {
+            int count = 0;
+            cJSON *elem;
+            cJSON_ArrayForEach(elem, root) {
+                if (count >= MAX_LAMPS) break;
+                cJSON *name = cJSON_GetObjectItem(elem, "name");
+                cJSON *address = cJSON_GetObjectItem(elem, "address");
+                if (cJSON_IsString(name) && cJSON_IsString(address)) {
+                    strncpy(g_lamp_cache[count].name, name->valuestring, MAX_LAMP_NAME_LEN - 1);
+                    strncpy(g_lamp_cache[count].address, address->valuestring, MAX_LAMP_ADDR_LEN - 1);
+                    g_lamp_cache[count].name[MAX_LAMP_NAME_LEN - 1] = '\0';
+                    g_lamp_cache[count].address[MAX_LAMP_ADDR_LEN - 1] = '\0';
+                    count++;
+                }
+            }
+            g_lamp_count = count;
+            ESP_LOGI(TAG, "Loaded %d lamps from NVS.", g_lamp_count);
+        } else {
+            ESP_LOGW(TAG, "Failed to parse lamp list JSON, starting fresh.");
+            g_lamp_count = 0;
+        }
+        cJSON_Delete(root);
+    }
+
+    free(json_string);
     nvs_close(nvs_handle);
 }
 
-int getCurrentNumberOfLamps() {
+/**
+ * @brief Saves the in-memory lamp cache to the NVS blob.
+ */
+static esp_err_t _save_to_nvs(void) {
     nvs_handle_t nvs_handle;
-    esp_err_t err;
-    // Open NVS namespace
-    err = nvs_open("lamps", NVS_READONLY, &nvs_handle);
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return -1; // Return -1 to indicate error
+        ESP_LOGE(TAG, "Error opening NVS for writing: %s", esp_err_to_name(err));
+        return err;
     }
-    // Iterate through the indices and count the number of lamps
-    int count = 0;
-    for (int i = 0; i < MAX_LAMPS; i++) {
-        LampInfo lamp_info;
-        err = load_lamp_info(&lamp_info, i);
-        if (err == ESP_OK) {
-            count++;
-        //} else if (err == ESP_ERR_NVS_NOT_FOUND) {
-            // No more lamps found, break the loop
-        //    break;
-        //} else {
-        //    ESP_LOGE(TAG, "Error loading lamp info: %s", esp_err_to_name(err));
-        //    nvs_close(nvs_handle);
-        //    return -1; // Return -1 to indicate error
+
+    cJSON *root = cJSON_CreateArray();
+    for (int i = 0; i < g_lamp_count; i++) {
+        cJSON *lamp_obj = cJSON_CreateObject();
+        cJSON_AddStringToObject(lamp_obj, "name", g_lamp_cache[i].name);
+        cJSON_AddStringToObject(lamp_obj, "address", g_lamp_cache[i].address);
+        cJSON_AddItemToArray(root, lamp_obj);
+    }
+
+    char *json_string = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    if (json_string == NULL) {
+        ESP_LOGE(TAG, "Failed to create JSON string from lamp cache.");
+        nvs_close(nvs_handle);
+        return ESP_FAIL;
+    }
+
+    err = nvs_set_blob(nvs_handle, NVS_KEY, json_string, strlen(json_string) + 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set lamp list blob in NVS: %s", esp_err_to_name(err));
+    } else {
+        err = nvs_commit(nvs_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "Successfully saved %d lamps to NVS.", g_lamp_count);
         }
     }
-    
-    // Close the NVS handle
+
+    free(json_string);
     nvs_close(nvs_handle);
-    return count;
+    return err;
+}
+
+// --- Public API Functions ---
+
+void lamp_nvs_init(void) {
+    _load_from_nvs();
+}
+
+esp_err_t add_lamp_info(const LampInfo *new_lamp) {
+    if (g_lamp_count >= MAX_LAMPS) {
+        ESP_LOGE(TAG, "Cannot add lamp, storage is full.");
+        return ESP_ERR_NVS_NO_FREE_PAGES;
+    }
+    // Check for duplicate name or address before adding
+    for (int i = 0; i < g_lamp_count; i++) {
+        if (strcmp(g_lamp_cache[i].name, new_lamp->name) == 0) {
+            ESP_LOGE(TAG, "Cannot add lamp, name '%s' already exists.", new_lamp->name);
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+
+    memcpy(&g_lamp_cache[g_lamp_count], new_lamp, sizeof(LampInfo));
+    g_lamp_count++;
+    return _save_to_nvs();
+}
+
+esp_err_t remove_lamp_info_by_name(const char *name) {
+    int found_index = -1;
+    for (int i = 0; i < g_lamp_count; i++) {
+        if (strcmp(g_lamp_cache[i].name, name) == 0) {
+            found_index = i;
+            break;
+        }
+    }
+
+    if (found_index == -1) {
+        return ESP_ERR_NVS_NOT_FOUND;
+    }
+
+    // Shift elements to fill the gap
+    for (int i = found_index; i < g_lamp_count - 1; i++) {
+        memcpy(&g_lamp_cache[i], &g_lamp_cache[i + 1], sizeof(LampInfo));
+    }
+    g_lamp_count--;
+
+    return _save_to_nvs();
+}
+
+esp_err_t update_lamp_info(const char *original_name, const LampInfo *updated_lamp) {
+    int found_index = -1;
+    for (int i = 0; i < g_lamp_count; i++) {
+        if (strcmp(g_lamp_cache[i].name, original_name) == 0) {
+            found_index = i;
+            break;
+        }
+    }
+
+    if (found_index == -1) {
+        return ESP_ERR_NVS_NOT_FOUND;
+    }
+
+    memcpy(&g_lamp_cache[found_index], updated_lamp, sizeof(LampInfo));
+    return _save_to_nvs();
+}
+
+const LampInfo* get_all_lamps(int* count) {
+    *count = g_lamp_count;
+    return g_lamp_cache;
+}
+
+esp_err_t find_lamp_by_name(const char *name, LampInfo *lamp_info) {
+    for (int i = 0; i < g_lamp_count; i++) {
+        if (strcmp(g_lamp_cache[i].name, name) == 0) {
+            memcpy(lamp_info, &g_lamp_cache[i], sizeof(LampInfo));
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NVS_NOT_FOUND;
+}
+
+esp_err_t find_lamp_by_address(uint16_t address, LampInfo *lamp_info) {
+    for (int i = 0; i < g_lamp_count; i++) {
+        uint16_t stored_addr = (uint16_t)strtol(g_lamp_cache[i].address, NULL, 0);
+        if (stored_addr == address) {
+            memcpy(lamp_info, &g_lamp_cache[i], sizeof(LampInfo));
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NVS_NOT_FOUND;
+}
+
+int get_lamp_count(void) {
+    return g_lamp_count;
 }

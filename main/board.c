@@ -25,8 +25,7 @@ static void board_led_init(void)
 {
     gpio_reset_pin(GPIO_NUM_2);
     gpio_set_direction(GPIO_NUM_2, GPIO_MODE_OUTPUT);
-    gpio_set_level(GPIO_NUM_2, LED_ON);
-    ESP_LOGW(TAG, "led GPIO 2 is ON");
+    gpio_set_level(GPIO_NUM_2, 0);
 }
 
 void board_init(void)
