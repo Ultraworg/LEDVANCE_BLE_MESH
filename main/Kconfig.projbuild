@@ -100,4 +100,38 @@ menu "Example Configuration"
             bool "WAPI PSK"
     endchoice
 
+    menu "Ethernet Configuration"
+        config ENABLE_ETHERNET
+            bool "Enable Ethernet Support"
+            default y
+            help
+                Enable Ethernet setup code. Configuration will be read from NVS at runtime.
+                If NVS is empty, these Kconfig values will be used as defaults.
+
+        config ETH_PHY_DEFAULT_TYPE
+            int "Default PHY Type (0:LAN8720, 1:IP101, 2:RTL8201, 3:DP83848)"
+            default 0
+            range 0 3
+
+        config ETH_MDC_GPIO
+            int "Default MDC GPIO"
+            default 23
+
+        config ETH_MDIO_GPIO
+            int "Default MDIO GPIO"
+            default 18
+
+        config ETH_PHY_ADDR
+            int "Default PHY Address"
+            default 1
+
+        config ETH_PHY_RST_GPIO
+            int "Default PHY Reset GPIO"
+            default -1
+
+        config ETH_PHY_POWER_GPIO
+            int "Default PHY Power GPIO"
+            default -1
+    endmenu
+
 endmenu
