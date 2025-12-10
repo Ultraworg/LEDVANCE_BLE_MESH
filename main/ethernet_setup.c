@@ -62,13 +62,13 @@ esp_err_t ethernet_setup_init(void) {
   nvs_handle_t nvs_handle;
   esp_err_t err = nvs_open("eth_config", NVS_READONLY, &nvs_handle);
 
-  int phy_type = CONFIG_ETH_PHY_DEFAULT_TYPE;
-  int mdc_gpio = CONFIG_ETH_MDC_GPIO;
-  int mdio_gpio = CONFIG_ETH_MDIO_GPIO;
-  int phy_addr = CONFIG_ETH_PHY_ADDR;
-  int rst_gpio = CONFIG_ETH_PHY_RST_GPIO;
-  int pwr_gpio = CONFIG_ETH_PHY_POWER_GPIO;
-  int clk_mode =
+  int32_t phy_type = CONFIG_ETH_PHY_DEFAULT_TYPE;
+  int32_t mdc_gpio = CONFIG_ETH_MDC_GPIO;
+  int32_t mdio_gpio = CONFIG_ETH_MDIO_GPIO;
+  int32_t phy_addr = CONFIG_ETH_PHY_ADDR;
+  int32_t rst_gpio = CONFIG_ETH_PHY_RST_GPIO;
+  int32_t pwr_gpio = CONFIG_ETH_PHY_POWER_GPIO;
+  int32_t clk_mode =
       0; // 0: Input(GPIO0), 1: Output-GPIO0, 2: Output-GPIO16, 3: Output-GPIO17
   uint8_t eth_enabled_nvs = 1;
 
