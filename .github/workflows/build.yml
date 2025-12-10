@@ -116,20 +116,20 @@ jobs:
                 cp artifacts/firmware-$chip/merged-binary.bin public/firmware/$BRANCH_NAME/$chip/firmware.bin
                 
                 # Generate manifest with correct chipFamily
-                cat <<EOF > public/firmware/$BRANCH_NAME/$chip/manifest.json
+                  cat <<EOF > public/firmware/$BRANCH_NAME/$chip/manifest.json
+          {
+            "name": "LEDVANCE BLE Mesh ($FAMILY) - $BRANCH_NAME",
+            "version": "latest",
+            "builds": [
               {
-                "name": "LEDVANCE BLE Mesh ($FAMILY) - $BRANCH_NAME",
-                "version": "latest",
-                "builds": [
-                  {
-                    "chipFamily": "$FAMILY",
-                    "parts": [
-                      { "path": "firmware.bin", "offset": 0 }
-                    ]
-                  }
+                "chipFamily": "$FAMILY",
+                "parts": [
+                  { "path": "firmware.bin", "offset": 0 }
                 ]
               }
-              EOF
+            ]
+          }
+          EOF
             else 
                 echo "Warning: No firmware found for $chip"
             fi
