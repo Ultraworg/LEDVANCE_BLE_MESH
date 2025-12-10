@@ -140,6 +140,7 @@ esp_err_t ethernet_setup_init(void) {
     return ESP_FAIL;
   }
 
+#if CONFIG_IDF_TARGET_ESP32
   eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
   esp32_emac_config.smi_gpio.mdc_num = mdc_gpio;
   esp32_emac_config.smi_gpio.mdio_num = mdio_gpio;
@@ -155,8 +156,6 @@ esp_err_t ethernet_setup_init(void) {
     esp32_emac_config.clock_config.rmii.clock_mode = EMAC_CLK_OUT;
     esp32_emac_config.clock_config.rmii.clock_gpio = 17;
   }
-  // clk_mode 1 (Output GPIO0) is technically possible on some silicon but
-  // usually external. Ignore for now.
 
   esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
 
@@ -176,6 +175,11 @@ esp_err_t ethernet_setup_init(void) {
 
   /* start Ethernet driver state machine */
   ESP_ERROR_CHECK(esp_eth_start(eth_handle));
+#else
+  ESP_LOGW(TAG,
+           "Ethernet not supported on this target (requires internal EMAC)");
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
 
   return ESP_OK;
 }
