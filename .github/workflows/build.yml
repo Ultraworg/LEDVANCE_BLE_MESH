@@ -48,8 +48,18 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.target }}-
+
       - name: Build Firmware
         shell: bash
+        env: 
+          IDF_CCACHE_ENABLE: "1"
         run: |
           . $IDF_PATH/export.sh
           idf.py set-target ${{ matrix.target }}

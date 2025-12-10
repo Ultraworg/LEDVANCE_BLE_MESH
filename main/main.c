@@ -448,9 +448,7 @@ void ble_mesh_send_gen_onoff_set(uint8_t onoff, uint16_t addr) {
   common.ctx.app_idx = app_state.app_idx;
   common.ctx.addr = addr;
   common.ctx.send_ttl = 7;
-  common.ctx.send_rel = false;
   common.msg_timeout = 0;
-  common.msg_role = ROLE_NODE;
 
   set.onoff_set.op_en = false;
   set.onoff_set.onoff = onoff;
@@ -483,9 +481,7 @@ void ble_mesh_send_lightness_set(uint16_t lightness, uint16_t addr) {
   common.ctx.app_idx = app_state.app_idx;
   common.ctx.addr = addr;
   common.ctx.send_ttl = 7;
-  common.ctx.send_rel = false;
   common.msg_timeout = 0;
-  common.msg_role = ROLE_NODE;
 
   set.lightness_set.op_en = false;
   set.lightness_set.lightness = lightness;
@@ -518,9 +514,7 @@ void ble_mesh_send_hsl_set(uint16_t hue, uint16_t saturation, uint16_t addr) {
   common.ctx.app_idx = app_state.app_idx;
   common.ctx.addr = addr;
   common.ctx.send_ttl = 7;
-  common.ctx.send_rel = false;
   common.msg_timeout = 0;
-  common.msg_role = ROLE_NODE;
 
   set.hsl_set.op_en = false;
   set.hsl_set.hsl_lightness = 70;

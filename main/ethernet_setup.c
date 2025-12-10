@@ -23,19 +23,19 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
 
   switch (event_id) {
-  case ETHERNET_EVENT_CONNECTED:
+  case ETH_EVENT_CONNECTED:
     esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
     ESP_LOGI(TAG, "Ethernet Link Up");
     ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0],
              mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
     break;
-  case ETHERNET_EVENT_DISCONNECTED:
+  case ETH_EVENT_DISCONNECTED:
     ESP_LOGI(TAG, "Ethernet Link Down");
     break;
-  case ETHERNET_EVENT_START:
+  case ETH_EVENT_START:
     ESP_LOGI(TAG, "Ethernet Started");
     break;
-  case ETHERNET_EVENT_STOP:
+  case ETH_EVENT_STOP:
     ESP_LOGI(TAG, "Ethernet Stopped");
     break;
   default:
@@ -140,8 +140,8 @@ esp_err_t ethernet_setup_init(void) {
   }
 
   eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
-  esp32_emac_config.smi_mdc_gpio_num = mdc_gpio;
-  esp32_emac_config.smi_mdio_gpio_num = mdio_gpio;
+  esp32_emac_config.smi_gpio.mdc_num = mdc_gpio;
+  esp32_emac_config.smi_gpio.mdio_num = mdio_gpio;
 
   // Config Clock
   if (clk_mode == 0) {
@@ -168,7 +168,7 @@ esp_err_t ethernet_setup_init(void) {
       esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)));
 
   // Register user defined event handers
-  ESP_ERROR_CHECK(esp_event_handler_register(ETHERNET_EVENT, ESP_EVENT_ANY_ID,
+  ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID,
                                              &eth_event_handler, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP,
                                              &got_ip_event_handler, NULL));
