@@ -35,8 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         # List the targets you want to build for here
-        #target: [esp32, esp32c3, esp32c6, esp32s3]
-        target: [esp32]
+        target: [esp32, esp32c3, esp32c6, esp32s3]
     
     # Use the official Espressif IDF Docker image
     # 'latest' usually points to the latest stable release (currently v5.x)
