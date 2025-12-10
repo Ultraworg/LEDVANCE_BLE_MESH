@@ -6,4 +6,4 @@ set(srcs "main.c"
 
 idf_component_register(SRCS "ethernet_setup.c" "${srcs}"
                     INCLUDE_DIRS "."
-                    REQUIRES nvs_flash esp_wifi esp_event driver mqtt esp_http_server json bt)
+                    REQUIRES nvs_flash esp_wifi esp_event driver mqtt esp_http_server json bt esp_eth)

@@ -17,7 +17,6 @@
 
 /* Standard C Libraries */
 #include <inttypes.h>
-#include <math.h> // Added for pow() function
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,17 +38,9 @@
 
 /* Wi-Fi & Networking */
 #include "esp_netif.h"
-#include "lwip/dns.h"
-#include "lwip/err.h"
-#include "lwip/netdb.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
 
 /* MQTT */
 #include "mqtt_client.h"
-
-/* HTTP Server */
-#include "esp_http_server.h"
 
 /* BLE Mesh */
 #include "esp_ble_mesh_common_api.h"
