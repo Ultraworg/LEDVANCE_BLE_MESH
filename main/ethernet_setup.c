@@ -118,7 +118,7 @@ esp_err_t ethernet_setup_init(void) {
   esp_eth_phy_t *phy = NULL;
   switch (phy_type) {
   case 0:
-    phy = esp_eth_phy_new_lan8720(&phy_config);
+    phy = esp_eth_phy_new_lan87xx(&phy_config);
     break;
   case 1:
     phy = esp_eth_phy_new_ip101(&phy_config);
