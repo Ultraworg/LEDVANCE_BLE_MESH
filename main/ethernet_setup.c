@@ -58,6 +58,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 esp_err_t ethernet_setup_init(void) {
+#if CONFIG_IDF_TARGET_ESP32
   // 1. Load Configuration from NVS
   nvs_handle_t nvs_handle;
   esp_err_t err = nvs_open("eth_config", NVS_READONLY, &nvs_handle);
@@ -140,7 +141,6 @@ esp_err_t ethernet_setup_init(void) {
     return ESP_FAIL;
   }
 
-#if CONFIG_IDF_TARGET_ESP32
   eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
   esp32_emac_config.smi_gpio.mdc_num = mdc_gpio;
   esp32_emac_config.smi_gpio.mdio_num = mdio_gpio;
@@ -175,13 +175,14 @@ esp_err_t ethernet_setup_init(void) {
 
   /* start Ethernet driver state machine */
   ESP_ERROR_CHECK(esp_eth_start(eth_handle));
-#else
+
+  return ESP_OK;
+
+#else // !CONFIG_IDF_TARGET_ESP32
   ESP_LOGW(TAG,
            "Ethernet not supported on this target (requires internal EMAC)");
   return ESP_ERR_NOT_SUPPORTED;
 #endif
-
-  return ESP_OK;
 }
 
 #else // CONFIG_ENABLE_ETHERNET
