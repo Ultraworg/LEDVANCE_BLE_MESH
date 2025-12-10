@@ -51,7 +51,7 @@ jobs:
       - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
+          path: .ccache
           key: ccache-${{ runner.os }}-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
             ccache-${{ runner.os }}-${{ matrix.target }}-
@@ -60,8 +60,11 @@ jobs:
         shell: bash
         env: 
           IDF_CCACHE_ENABLE: "1"
+          CCACHE_DIR: "${{ github.workspace }}/.ccache"
         run: |
           . $IDF_PATH/export.sh
+          # Ensure ccache dir exists
+          mkdir -p $CCACHE_DIR
           idf.py set-target ${{ matrix.target }}
           idf.py build
           idf.py merge-bin # Creates build/merged-binary.bin
