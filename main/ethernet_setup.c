@@ -23,19 +23,19 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
 
   switch (event_id) {
-  case ETH_EVENT_CONNECTED:
+  case ETHERNET_EVENT_CONNECTED:
     esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
     ESP_LOGI(TAG, "Ethernet Link Up");
     ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x", mac_addr[0],
              mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
     break;
-  case ETH_EVENT_DISCONNECTED:
+  case ETHERNET_EVENT_DISCONNECTED:
     ESP_LOGI(TAG, "Ethernet Link Down");
     break;
-  case ETH_EVENT_START:
+  case ETHERNET_EVENT_START:
     ESP_LOGI(TAG, "Ethernet Started");
     break;
-  case ETH_EVENT_STOP:
+  case ETHERNET_EVENT_STOP:
     ESP_LOGI(TAG, "Ethernet Stopped");
     break;
   default:
@@ -99,7 +99,8 @@ esp_err_t ethernet_setup_init(void) {
 
   ESP_LOGI(TAG,
            "ETH Config: Type=%d, MDC=%d, MDIO=%d, Addr=%d, Rst=%d, ClkMode=%d",
-           phy_type, mdc_gpio, mdio_gpio, phy_addr, rst_gpio, clk_mode);
+           (int)phy_type, (int)mdc_gpio, (int)mdio_gpio, (int)phy_addr,
+           (int)rst_gpio, (int)clk_mode);
 
   esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
   esp_netif_t *eth_netif = esp_netif_new(&cfg);
@@ -130,7 +131,7 @@ esp_err_t ethernet_setup_init(void) {
     phy = esp_eth_phy_new_dp83848(&phy_config);
     break;
   default:
-    ESP_LOGE(TAG, "Unknown PHY Type %d", phy_type);
+    ESP_LOGE(TAG, "Unknown PHY Type %d", (int)phy_type);
     return ESP_FAIL;
   }
 
