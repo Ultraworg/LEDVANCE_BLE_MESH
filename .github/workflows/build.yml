@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev
+      - Ethernet-support
     paths:
       - 'main/**'
       - 'web/**'
@@ -74,14 +75,20 @@ jobs:
 
       - name: Setup Web Directory
         run: |
-          mkdir -p public/firmware
+          # Get branch name from clean variable
+          BRANCH_NAME=${GITHUB_REF_NAME}
+          echo "Deploying for branch: $BRANCH_NAME"
+          
+          mkdir -p public/firmware/$BRANCH_NAME
           cp web/index.html public/index.html
 
       - name: Process Firmware & Generate Manifests
         run: |
+          BRANCH_NAME=${GITHUB_REF_NAME}
+          
           for chip in esp32 esp32c3 esp32c6 esp32s3; do
-            echo "Processing $chip..."
-            mkdir -p public/firmware/$chip
+            echo "Processing $chip for branch $BRANCH_NAME..."
+            mkdir -p public/firmware/$BRANCH_NAME/$chip
             
             # Map build target to correct ESP Web Tools chipFamily name
             case $chip in
@@ -93,23 +100,28 @@ jobs:
             esac
 
             # Move and rename the single binary
-            cp artifacts/firmware-$chip/merged-binary.bin public/firmware/$chip/firmware.bin
-            
-            # Generate manifest with correct chipFamily
-            cat <<EOF > public/firmware/$chip/manifest.json
-          {
-            "name": "LEDVANCE BLE Mesh ($FAMILY)",
-            "version": "latest",
-            "builds": [
+            # Check if artifact exists first (matrix might be partial if we changed it, but here it is fixed)
+            if [ -f artifacts/firmware-$chip/merged-binary.bin ]; then
+                cp artifacts/firmware-$chip/merged-binary.bin public/firmware/$BRANCH_NAME/$chip/firmware.bin
+                
+                # Generate manifest with correct chipFamily
+                cat <<EOF > public/firmware/$BRANCH_NAME/$chip/manifest.json
               {
-                "chipFamily": "$FAMILY",
-                "parts": [
-                  { "path": "firmware.bin", "offset": 0 }
+                "name": "LEDVANCE BLE Mesh ($FAMILY) - $BRANCH_NAME",
+                "version": "latest",
+                "builds": [
+                  {
+                    "chipFamily": "$FAMILY",
+                    "parts": [
+                      { "path": "firmware.bin", "offset": 0 }
+                    ]
+                  }
                 ]
               }
-            ]
-          }
-          EOF
+              EOF
+            else 
+                echo "Warning: No firmware found for $chip"
+            fi
           done
 
       - name: Setup Pages

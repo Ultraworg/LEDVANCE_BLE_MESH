@@ -1,24 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LEDVANCE BLE Mesh Flasher</title>
     <style>
-        body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto; line-height: 1.5; }
-        h1 { color: #d35400; }
-        .card { background: #f4f4f4; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; }
-        select { padding: 0.5rem; font-size: 1rem; margin-right: 1rem; }
+        body {
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        h1 {
+            color: #d35400;
+        }
+
+        .card {
+            background: #f4f4f4;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        select {
+            padding: 0.5rem;
+            font-size: 1rem;
+            margin-right: 1rem;
+        }
+
         /* Import the web tools component */
-        script { display: none; } 
+        script {
+            display: none;
+        }
     </style>
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
 </head>
+
 <body>
     <h1>LEDVANCE BLE Mesh Flasher</h1>
     <p>Connect your ESP device via USB and click the button below to flash the latest firmware.</p>
 
     <div class="card">
+        <label for="branchType">Select Firmware Version:</label>
+        <select id="branchType">
+            <option value="dev">Standard (Dev)</option>
+            <option value="ethernet">Ethernet Support (Experimental AI developed)</option>
+        </select>
+
+        <br><br>
+
         <label for="chipType">Select your Chip Type:</label>
         <select id="chipType">
             <option value="esp32">ESP32 (Standard)</option>
@@ -29,19 +62,24 @@
 
         <br><br>
 
-        <esp-web-install-button id="installButton" manifest="firmware/esp32/manifest.json"></esp-web-install-button>
+        <esp-web-install-button id="installButton" manifest="firmware/dev/esp32/manifest.json"></esp-web-install-button>
     </div>
 
     <script>
-        const select = document.getElementById('chipType');
+        const branchSelect = document.getElementById('branchType');
+        const chipSelect = document.getElementById('chipType');
         const button = document.getElementById('installButton');
 
-        // Update the manifest URL when the user changes the chip selection
-        select.addEventListener('change', () => {
-            const chip = select.value;
-            button.manifest = `firmware/${chip}/manifest.json`;
-            console.log(`Switched to ${chip}`);
-        });
+        function updateManifest() {
+            const branch = branchSelect.value;
+            const chip = chipSelect.value;
+            button.manifest = `firmware/${branch}/${chip}/manifest.json`;
+            console.log(`Switched to ${branch} / ${chip}`);
+        }
+
+        branchSelect.addEventListener('change', updateManifest);
+        chipSelect.addEventListener('change', updateManifest);
     </script>
 </body>
+
 </html>
