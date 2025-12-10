@@ -68,8 +68,9 @@ esp_err_t ethernet_setup_init(void) {
   int phy_addr = CONFIG_ETH_PHY_ADDR;
   int rst_gpio = CONFIG_ETH_PHY_RST_GPIO;
   int pwr_gpio = CONFIG_ETH_PHY_POWER_GPIO;
-  uint8_t eth_enabled_nvs =
-      1; // Default to enabled? Or logic should be: if NVS exists, use it.
+  int clk_mode =
+      0; // 0: Input(GPIO0), 1: Output-GPIO0, 2: Output-GPIO16, 3: Output-GPIO17
+  uint8_t eth_enabled_nvs = 1;
 
   if (err == ESP_OK) {
     ESP_LOGI(TAG, "Loading Ethernet config from NVS...");
@@ -86,6 +87,7 @@ esp_err_t ethernet_setup_init(void) {
     nvs_get_i32(nvs_handle, "addr", &phy_addr);
     nvs_get_i32(nvs_handle, "rst", &rst_gpio);
     nvs_get_i32(nvs_handle, "pwr", &pwr_gpio); // Optional
+    nvs_get_i32(nvs_handle, "clk_mode", &clk_mode);
     nvs_close(nvs_handle);
   } else {
     // Fallback to Kconfig defaults
@@ -95,8 +97,9 @@ esp_err_t ethernet_setup_init(void) {
     // keep Kconfig defaults.
   }
 
-  ESP_LOGI(TAG, "ETH Config: Type=%d, MDC=%d, MDIO=%d, Addr=%d, Rst=%d",
-           phy_type, mdc_gpio, mdio_gpio, phy_addr, rst_gpio);
+  ESP_LOGI(TAG,
+           "ETH Config: Type=%d, MDC=%d, MDIO=%d, Addr=%d, Rst=%d, ClkMode=%d",
+           phy_type, mdc_gpio, mdio_gpio, phy_addr, rst_gpio, clk_mode);
 
   esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
   esp_netif_t *eth_netif = esp_netif_new(&cfg);
@@ -139,6 +142,20 @@ esp_err_t ethernet_setup_init(void) {
   eth_esp32_emac_config_t esp32_emac_config = ETH_ESP32_EMAC_DEFAULT_CONFIG();
   esp32_emac_config.smi_mdc_gpio_num = mdc_gpio;
   esp32_emac_config.smi_mdio_gpio_num = mdio_gpio;
+
+  // Config Clock
+  if (clk_mode == 0) {
+    esp32_emac_config.clock_config.rmii.clock_mode = EMAC_CLK_EXT_IN;
+    esp32_emac_config.clock_config.rmii.clock_gpio = EMAC_CLK_IN_GPIO; // GPIO0
+  } else if (clk_mode == 2) {
+    esp32_emac_config.clock_config.rmii.clock_mode = EMAC_CLK_OUT;
+    esp32_emac_config.clock_config.rmii.clock_gpio = 16;
+  } else if (clk_mode == 3) {
+    esp32_emac_config.clock_config.rmii.clock_mode = EMAC_CLK_OUT;
+    esp32_emac_config.clock_config.rmii.clock_gpio = 17;
+  }
+  // clk_mode 1 (Output GPIO0) is technically possible on some silicon but
+  // usually external. Ignore for now.
 
   esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
 

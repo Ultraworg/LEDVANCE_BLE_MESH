@@ -124,6 +124,9 @@ static esp_err_t root_get_handler(httpd_req_t *req) {
       "<option value='0'>LAN8720</option><option "
       "value='1'>IP101</option><option value='2'>RTL8201</option><option "
       "value='3'>DP83848</option></select>"
+      "<label>Clock Mode:</label><select name='eth_clk'>"
+      "<option value='0'>Input (GPIO0)</option><option value='2'>Output "
+      "(GPIO16)</option><option value='3'>Output (GPIO17)</option></select>"
       "<label>MDC Pin:</label><input type='number' name='eth_mdc' value='23'>"
       "<label>MDIO Pin:</label><input type='number' name='eth_mdio' value='18'>"
       "<label>PHY Addr:</label><input type='number' name='eth_addr' value='1'>"
@@ -166,6 +169,10 @@ static esp_err_t save_post_handler(httpd_req_t *req) {
       if (get_post_field(buf, "eth_phy=", val_str, sizeof(val_str)) == ESP_OK) {
         val = atoi(val_str);
         nvs_set_i32(eth_nvs, "phy_type", val);
+      }
+      if (get_post_field(buf, "eth_clk=", val_str, sizeof(val_str)) == ESP_OK) {
+        val = atoi(val_str);
+        nvs_set_i32(eth_nvs, "clk_mode", val);
       }
       if (get_post_field(buf, "eth_mdc=", val_str, sizeof(val_str)) == ESP_OK) {
         val = atoi(val_str);
